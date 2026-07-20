@@ -1,0 +1,50 @@
+name: Deploy GRUB Green Theme
+
+on:
+  push:
+    branches: [ "main" ] # Tự động chạy khi bạn push code lên nhánh main
+  workflow_dispatch:     # Cho phép bạn bấm nút "Run workflow" thủ công trên GitHub
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Install Android ADB
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y adb
+
+    - name: Connect to AndroidTV and Deploy
+      env:
+        # Lấy thông tin IP và Cổng từ GitHub Secrets để bảo mật
+        ANDROID_IP: ${{ secrets.ANDROID_IP }}
+        ANDROID_PORT: ${{ secrets.ANDROID_PORT }}
+      run: |
+        echo "🔌 Đang kết nối tới AndroidTV-x86 qua mạng ngoài..."
+        adb connect $ANDROID_IP:$ANDROID_PORT
+        
+        # Kiểm tra trạng thái kết nối
+        adb devices
+        
+        echo "🔓 Mở quyền ghi phân vùng GRUB..."
+        adb shell "su -c 'mount -o remount,rw /mnt/grub'"
+        
+        echo "📦 Đang đẩy file cấu hình và ảnh sọc xanh lá lên thiết bị..."
+        adb shell "mkdir -p /sdcard/grub_tmp"
+        
+        # Copy file từ kho chứa GitHub vào thư mục tạm trên Android
+        adb push ./grub_theme/green_stripes.png /sdcard/grub_tmp/
+        adb push ./grub_theme/grub.cfg /sdcard/grub_tmp/
+        
+        echo "🔄 Cập nhật giao diện GRUB mới vào hệ thống..."
+        adb shell "su -c 'cp /sdcard/grub_tmp/green_stripes.png /mnt/grub/grub/'"
+        adb shell "su -c 'cp /sdcard/grub_tmp/grub.cfg /mnt/grub/grub/'"
+        
+        echo "🧹 Dọn dẹp file tạm..."
+        adb shell "rm -rf /sdcard/grub_tmp"
+        
+        echo "✅ Đã deploy giao diện GRUB Xanh Lá Sọc thành công!"
