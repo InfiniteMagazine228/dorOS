@@ -1,50 +1,44 @@
-name: Deploy GRUB Green Theme
+name: Clone AndroidTV-x86 Source
 
 on:
-  push:
-    branches: [ "main" ] # Tự động chạy khi bạn push code lên nhánh main
-  workflow_dispatch:     # Cho phép bạn bấm nút "Run workflow" thủ công trên GitHub
+  workflow_dispatch: # Chạy thủ công khi bạn muốn đồng bộ mã nguồn mới nhất
 
 jobs:
-  deploy:
+  clone-source:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    - name: Free Disk Space (Dọn dẹp ổ cứng GitHub Actions)
+      uses: jlumbroso/free-disk-space@v1.3.1
+      with:
+        tool-cache: true
+        android: false # Giữ lại các công cụ Android cần thiết
 
-    - name: Install Android ADB
+    - name: Install Repo Tool
       run: |
-        sudo apt-get update
-        sudo apt-get install -y adb
+        mkdir -p ~/bin
+        curl https://googleapis.com > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
 
-    - name: Connect to AndroidTV and Deploy
-      env:
-        # Lấy thông tin IP và Cổng từ GitHub Secrets để bảo mật
-        ANDROID_IP: ${{ secrets.ANDROID_IP }}
-        ANDROID_PORT: ${{ secrets.ANDROID_PORT }}
+    - name: Configure Git
       run: |
-        echo "🔌 Đang kết nối tới AndroidTV-x86 qua mạng ngoài..."
-        adb connect $ANDROID_IP:$ANDROID_PORT
+        git config --global user.name "Your Name"
+        git config --global user.email "you@example.com"
+
+    - name: Initialize and Sync AndroidTV-x86 Repo
+      run: |
+        mkdir android-x86
+        cd android-x86
+        # Khởi tạo repo Android-x86 (Ví dụ bản Android 9 hoặc bản bạn đang dùng)
+        repo init -u https://osdn.net -b maroon-x86
         
-        # Kiểm tra trạng thái kết nối
-        adb devices
-        
-        echo "🔓 Mở quyền ghi phân vùng GRUB..."
-        adb shell "su -c 'mount -o remount,rw /mnt/grub'"
-        
-        echo "📦 Đang đẩy file cấu hình và ảnh sọc xanh lá lên thiết bị..."
-        adb shell "mkdir -p /sdcard/grub_tmp"
-        
-        # Copy file từ kho chứa GitHub vào thư mục tạm trên Android
-        adb push ./grub_theme/green_stripes.png /sdcard/grub_tmp/
-        adb push ./grub_theme/grub.cfg /sdcard/grub_tmp/
-        
-        echo "🔄 Cập nhật giao diện GRUB mới vào hệ thống..."
-        adb shell "su -c 'cp /sdcard/grub_tmp/green_stripes.png /mnt/grub/grub/'"
-        adb shell "su -c 'cp /sdcard/grub_tmp/grub.cfg /mnt/grub/grub/'"
-        
-        echo "🧹 Dọn dẹp file tạm..."
-        adb shell "rm -rf /sdcard/grub_tmp"
-        
-        echo "✅ Đã deploy giao diện GRUB Xanh Lá Sọc thành công!"
+        echo "📥 Đang tải mã nguồn (Quá trình này tốn nhiều thời gian)..."
+        # --depth=1 để tải bản mới nhất, nhẹ ổ cứng
+        repo sync -c -j$(nproc) --no-tags --depth=1 
+
+    # Lưu mã nguồn vào Cache hoặc Server riêng của bạn để workflow build dùng tiếp
+    - name: Cache Source Code
+      uses: actions/cache@v4
+      with:
+        path: android-x86
+        key: android-tv-src-${{ github.sha }}
