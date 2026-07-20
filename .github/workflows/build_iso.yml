@@ -1,0 +1,54 @@
+name: Build AndroidTV-x86 ISO
+
+on:
+  workflow_run:
+    workflows: ["Clone AndroidTV-x86 Source"]
+    types:
+      - completed # Tự động chạy ngay sau khi file clone_AndroidTV ở trên chạy xong thành công
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install Build Dependencies (Cài thư viện build)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev \
+          gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev \
+          lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig mtools squashfs-tools BC
+
+    - name: Restore Cached Source Code
+      uses: actions/cache@v4
+      with:
+        path: android-x86
+        key: android-tv-src-${{ github.sha }}
+
+    - name: Inject GRUB Green Theme (Tích hợp luôn giao diện xanh lá vào ISO)
+      run: |
+        # Đè file cấu hình GRUB xanh lá sọc của bạn vào bộ mã nguồn trước khi build
+        cp -f ./grub_theme/grub.cfg android-x86/bootable/newinstaller/boot/grub/menu.lst || true
+        cp -f ./grub_theme/green_stripes.png android-x86/bootable/newinstaller/boot/grub/ || true
+
+    - name: Build ISO Image
+      run: |
+        cd android-x86
+        # Thiết lập môi trường build
+        source build/envsetup.sh
+        
+        # Chọn cấu hình build cho AndroidTV x86 (tùy thuộc vào bản manifest bạn dùng, ví dụ: android_x86-userdebug)
+        lunch android_x86-userdebug
+        
+        echo "🛠️ Đang biên dịch mã nguồn thành file ISO..."
+        make -j$(nproc) iso_img
+
+    - name: Upload ISO Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AndroidTV-x86-GreenTheme-ISO
+        path: android-x86/out/target/product/x86/*.iso
+        retention-days: 7 # Lưu trữ file ISO trên GitHub trong 7 ngày
